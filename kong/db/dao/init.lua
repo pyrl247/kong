@@ -254,6 +254,12 @@ local function validate_options_value(self, options)
     end
   end
 
+  if options.transformations_enabled ~= nil then
+    if type(options.transformations_enabled) ~= "boolean" then
+      errors.transformations_enabled = "must be a boolean"
+    end
+  end
+
   if next(errors) then
     return nil, errors
   end
@@ -322,6 +328,20 @@ end
 
 
 local function check_insert(self, entity, options)
+  local transformations_enabled
+  if options ~= nil then
+    local ok, errors = validate_options_value(self, options)
+    if not ok then
+      local err_t = self.errors:invalid_options(errors)
+      return nil, tostring(err_t), err_t
+    end
+    transformations_enabled = options.transformations_enabled
+  end
+
+  if transformations_enabled == nil then
+    transformations_enabled = true
+  end
+
   local entity_to_insert, err = self.schema:process_auto_fields(entity, "insert")
   if not entity_to_insert then
     local err_t = self.errors:schema_violation(err)
@@ -339,16 +359,10 @@ local function check_insert(self, entity, options)
     return nil, tostring(err_t), err_t
   end
 
-  entity_to_insert, err = self.schema:transform(entity_to_insert, entity, "insert")
-  if not entity_to_insert then
-    err_t = self.errors:transformation_error(err)
-    return nil, tostring(err_t), err_t
-  end
-
-  if options ~= nil then
-    ok, errors = validate_options_value(self, options)
-    if not ok then
-      local err_t = self.errors:invalid_options(errors)
+  if transformations_enabled then
+    entity_to_insert, err = self.schema:transform(entity_to_insert, entity, "insert")
+    if not entity_to_insert then
+      err_t = self.errors:transformation_error(err)
       return nil, tostring(err_t), err_t
     end
   end
@@ -362,6 +376,20 @@ end
 
 
 local function check_update(self, key, entity, options, name)
+  local transformations_enabled
+  if options ~= nil then
+    local ok, errors = validate_options_value(self, options)
+    if not ok then
+      local err_t = self.errors:invalid_options(errors)
+      return nil, nil, tostring(err_t), err_t
+    end
+    transformations_enabled = options.transformations_enabled
+  end
+
+  if transformations_enabled == nil then
+    transformations_enabled = true
+  end
+
   local entity_to_update, err, read_before_write, check_immutable_fields =
     self.schema:process_auto_fields(entity, "update")
   if not entity_to_update then
@@ -411,16 +439,10 @@ local function check_update(self, key, entity, options, name)
     return nil, nil, tostring(err_t), err_t
   end
 
-  entity_to_update, err = self.schema:transform(entity_to_update, entity, "update")
-  if not entity_to_update then
-    err_t = self.errors:transformation_error(err)
-    return nil, nil, tostring(err_t), err_t
-  end
-
-  if options ~= nil then
-    ok, errors = validate_options_value(self, options)
-    if not ok then
-      local err_t = self.errors:invalid_options(errors)
+  if transformations_enabled then
+    entity_to_update, err = self.schema:transform(entity_to_update, entity, "update")
+    if not entity_to_update then
+      err_t = self.errors:transformation_error(err)
       return nil, nil, tostring(err_t), err_t
     end
   end
@@ -434,6 +456,20 @@ end
 
 
 local function check_upsert(self, entity, options, name, value)
+  local transformations_enabled
+  if options ~= nil then
+    local ok, errors = validate_options_value(self, options)
+    if not ok then
+      local err_t = self.errors:invalid_options(errors)
+      return nil, tostring(err_t), err_t
+    end
+    transformations_enabled = options.transformations_enabled
+  end
+
+  if transformations_enabled == nil then
+    transformations_enabled = true
+  end
+
   local entity_to_upsert, err = self.schema:process_auto_fields(entity, "upsert")
   if not entity_to_upsert then
     local err_t = self.errors:schema_violation(err)
@@ -459,16 +495,10 @@ local function check_upsert(self, entity, options, name, value)
     entity_to_upsert[name] = nil
   end
 
-  entity_to_upsert, err = self.schema:transform(entity_to_upsert, entity, "upsert")
-  if not entity_to_upsert then
-    err_t = self.errors:transformation_error(err)
-    return nil, tostring(err_t), err_t
-  end
-
-  if options ~= nil then
-    local ok, errors = validate_options_value(self, options)
-    if not ok then
-      local err_t = self.errors:invalid_options(errors)
+  if transformations_enabled then
+    entity_to_upsert, err = self.schema:transform(entity_to_upsert, entity, "upsert")
+    if not entity_to_upsert then
+      err_t = self.errors:transformation_error(err)
       return nil, tostring(err_t), err_t
     end
   end
@@ -1321,11 +1351,21 @@ end
 
 
 function DAO:row_to_entity(row, options)
+  local transformations_enabled, nulls
   if options ~= nil then
     validate_options_type(options)
+    local ok, errors = validate_options_value(self, options)
+    if not ok then
+      local err_t = self.errors:invalid_options(errors)
+      return nil, tostring(err_t), err_t
+    end
+    transformations_enabled = options.transformations_enabled
+    nulls = options.nulls
   end
 
-  local nulls = options and options.nulls
+  if transformations_enabled == nil then
+    transformations_enabled = true
+  end
 
   local entity, errors = self.schema:process_auto_fields(row, "select", nulls)
   if not entity then
@@ -1333,13 +1373,16 @@ function DAO:row_to_entity(row, options)
     return nil, tostring(err_t), err_t
   end
 
-  local transformed_entity, err = self.schema:transform(entity, row, "select")
-  if not transformed_entity then
-    local err_t = self.errors:transformation_error(err)
-    return nil, tostring(err_t), err_t
+  if transformations_enabled then
+    local err
+    entity, err = self.schema:transform(entity, row, "select")
+    if not entity then
+      local err_t = self.errors:transformation_error(err)
+      return nil, tostring(err_t), err_t
+    end
   end
 
-  return transformed_entity
+  return entity
 end
 
 
