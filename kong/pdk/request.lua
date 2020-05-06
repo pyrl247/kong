@@ -30,6 +30,7 @@ cjson.decode_array_with_array_mt(true)
 local function new(self)
   local _REQUEST = {}
 
+  local HOST_PORTS             = self.configuration.host_ports or {}
 
   local MIN_HEADERS            = 1
   local MAX_HEADERS_DEFAULT    = 100
@@ -232,7 +233,13 @@ local function new(self)
       end
     end
 
-    return _REQUEST.get_port()
+    local host_port = ngx.ctx.host_port
+    if host_port then
+      return host_port
+    end
+
+    local port = _REQUEST.get_port()
+    return HOST_PORTS[port] or port
   end
 
 
